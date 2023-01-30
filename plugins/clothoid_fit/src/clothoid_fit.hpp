@@ -43,6 +43,7 @@ namespace cloe {
 
 struct ClothoidFitConf : public Confable {
   bool enabled = true;
+  bool frustum_culling = true;
 
   double estimation_dist;
 
@@ -53,6 +54,8 @@ struct ClothoidFitConf : public Confable {
   CONFABLE_SCHEMA(ClothoidFitConf) {
     return fable::Schema{
         {"enable", make_schema(&enabled, "enable or disable component")},
+        {"frustum_culling", make_schema(&frustum_culling, "enable or disable frustum culling")},
+
         {"estimation_distance",
          make_schema(&estimation_dist,
                      "consider polyline points within this distance for clothoid estimation")
@@ -76,6 +79,18 @@ double estimate_lane_boundary_length(const std::vector<Eigen::Vector3d>& points)
   return length;
 }
 
+void cleanup_lane_boundary_points(std::vector<Eigen::Vector3d>& points) {
+  // Points shall have at least 1cm distance for robust clothoid estimation.
+  const double min_dist = 0.01;
+  std::vector<Eigen::Vector3d> pts_mod{points.front()};
+  for (uint64_t i = 1; i < points.size(); ++i) {
+    if ((points[i] - points[i - 1]).norm() > min_dist) {
+      pts_mod.push_back(points[i]);
+    }
+  }
+  points = pts_mod;
+}
+
 /**
  * Compute heading angle [rad] from two points (line direction from pt0 to pt1).
  *
@@ -85,7 +100,22 @@ double estimate_lane_boundary_length(const std::vector<Eigen::Vector3d>& points)
 double calc_heading_angle(const Eigen::Vector3d& pt0, const Eigen::Vector3d& pt1) {
   double dx = pt1.x() - pt0.x();
   dx = dx == 0.0 ? 1.0e-10 : dx;
-  return atan((pt1.y() - pt0.y()) / dx);
+  double slope = (pt1.y() - pt0.y()) / dx;
+  return atan(slope);
+}
+
+// https://repository.uantwerpen.be/docman/irua/fb388b/3959.pdf
+double calc_heading_angle_adv(const Eigen::Vector3d& ptm1, const Eigen::Vector3d& pt0,
+                              const Eigen::Vector3d& pt1) {
+  double dx1 = pt1.x() - pt0.x();
+  dx1 = dx1 == 0.0 ? 1.0e-10 : dx1;
+  double dx0 = pt0.x() - ptm1.x();
+  dx0 = dx0 == 0.0 ? 1.0e-10 : dx0;
+  double dx = dx1 + dx0;
+  dx = dx == 0.0 ? 1.0e-10 : dx;
+  double slope = -1.0 * dx1 / (dx0 * dx) * ptm1.y() + (dx1 - dx0) / (dx0 * dx1) * pt0.y() +
+                 dx0 / (dx1 * dx) * pt1.y();
+  return atan(slope);
 }
 
 /**
@@ -193,12 +223,16 @@ class LaneBoundaryClothoidFit : public LaneBoundarySensor {
     if (cached_) {
       return lbs_;
     }
-    // Copy all lane boundaries from the source sensor component.
-    lbs_ = sensor_in_->sensed_lane_boundaries();
     if (config_.enabled) {
-      for (auto& kv : lbs_) {
-        fit_clothoid(kv.second);
+      for (auto& kv : sensor_in_->sensed_lane_boundaries()) {
+        auto lb = kv.second;
+        if (fit_clothoid(lb)) {
+          lbs_[kv.first] = lb;
+        }
       }
+    } else {
+      // Copy all lane boundaries from the source sensor component.
+      lbs_ = sensor_in_->sensed_lane_boundaries();
     }
     cached_ = true;
     return lbs_;
@@ -241,6 +275,80 @@ class LaneBoundaryClothoidFit : public LaneBoundarySensor {
   }
 
  protected:
+  // Frustum culling radar approach ToDo(tobias) https://cgvr.cs.uni-bremen.de/teaching/cg_literatur/lighthouse3d_view_frustum_culling/index.html
+  void lane_boundary_point_culling(std::vector<Eigen::Vector3d>& points,
+                                   std::vector<Eigen::Vector3d>& pts_out_start,
+                                   std::vector<Eigen::Vector3d>& pts_out_end) const {
+    double fov_h_l = -0.5 * this->frustum().fov_h + this->frustum().offset_h;
+    double fov_h_u = 0.5 * this->frustum().fov_h + this->frustum().offset_h;
+    double fov_v_l = -0.5 * this->frustum().fov_v + this->frustum().offset_v;
+    double fov_v_u = 0.5 * this->frustum().fov_v + this->frustum().offset_v;
+    double range_mult = cos(this->frustum().offset_h) * cos(this->frustum().offset_v);
+    // Keep track on which side of each frustum plane a point is located
+    const uint8_t PLANE_RIGHT_OK{0b0000'0001};
+    const uint8_t PLANE_LEFT_OK{0b0000'0010};
+    const uint8_t PLANE_LOW_OK{0b0000'0100};
+    const uint8_t PLANE_HIGH_OK{0b0000'1000};
+    const uint8_t PLANE_NEAR_OK{0b0001'0000};
+    const uint8_t PLANE_FAR_OK{0b0010'0000};
+    const uint8_t all_set = PLANE_RIGHT_OK | PLANE_LEFT_OK | PLANE_LOW_OK | PLANE_HIGH_OK |
+                            PLANE_NEAR_OK | PLANE_FAR_OK;
+    // Keep only points inside the frustum.
+    std::vector<Eigen::Vector3d> pts_frustum;
+    pts_frustum.reserve(points.size());
+    bool found_pts{false};
+    for (const auto& pt : points) {
+      uint8_t plane_mask{0};
+      // Horizontal field of view.
+      double x = pt.x() == 0.0 ? 1.0e-10 : pt.x();
+      double phi = atan2(pt.y(), x);
+      if (phi >= fov_h_l) {
+        // Right plane.
+        plane_mask |= PLANE_RIGHT_OK;
+      }
+      if (phi <= fov_h_u) {
+        // Left plane.
+        plane_mask |= PLANE_LEFT_OK;
+      }
+      // Vertical field of view.
+      phi = atan2(pt.z(), x);
+      if (phi >= fov_v_l) {
+        // Lower plane.
+        plane_mask |= PLANE_LOW_OK;
+      }
+      if (phi <= fov_v_u) {
+        // Upper plane.
+        plane_mask |= PLANE_HIGH_OK;
+      }
+      // Field of view distance range.
+      x = pt.x() * range_mult;
+      if (x >= this->frustum().clip_near) {
+        // Near plane.
+        plane_mask |= PLANE_NEAR_OK;
+      }
+      if (x <= this->frustum().clip_far) {
+        // Far plane.
+        plane_mask |= PLANE_FAR_OK;
+      }
+      // Remove point if not in frustum.
+      if (plane_mask == all_set) {
+        if (pts_out_end.size() > 0) {
+          // In case multiple segments of the polyline are inside the frustum, only keep the first visible segment.
+          break;
+        }
+        pts_frustum.push_back(pt);
+        found_pts = true;
+      } else if (!found_pts) {
+        // Point is outside field of view and no point inside was found previously.
+        pts_out_start.push_back(pt);
+      } else {
+        // Point is outside field of view and at least one point inside was found previously.
+        pts_out_end.push_back(pt);
+      }
+    }
+    points = pts_frustum;
+  }
+
   /**
    * Fit one clothoid segment to the given polyline using a point and heading
    * angle at the beginning (x=0) and end (=estimation_distance) of the polyline
@@ -248,16 +356,46 @@ class LaneBoundaryClothoidFit : public LaneBoundarySensor {
    *
    * \param lb: Lane boundary with polyline data.
    */
-  void fit_clothoid(LaneBoundary& lb) const {
-    if (lb.points.size() < 2) {
-      throw cloe::ModelError("Clothoid fit requires at least two points.");
-    }
+  bool fit_clothoid(LaneBoundary& lb) const {
     if (estimate_lane_boundary_length(lb.points) < 0.5) {
-      // Skip tiny lane boundary snippets for now.
-      return;
+      // Discard tiny lane boundary snippets.
+      logger()->debug("Discarding short lane boundary segment < 0.5m.");
+      return false;
     }
+    cleanup_lane_boundary_points(lb.points);
+    // Store discarded points for advanced heading angle estimation.
+    std::vector<Eigen::Vector3d> pts_out_start, pts_out_end;
+    if (config_.frustum_culling) {
+      lane_boundary_point_culling(lb.points, pts_out_start, pts_out_end);
+    }
+    if (lb.points.size() < 2) {
+      logger()->debug("Clothoid fit requires at least two points.");
+      return false;
+    }
+    Eigen::Vector3d x0 = lb.points.at(0);
+    lb.dx_start = x0.x();
+    lb.dy_start = x0.y();
+    double hdg0;
+    if (pts_out_start.size() > 0) {
+      hdg0 = calc_heading_angle_adv(pts_out_start.back(), lb.points.at(0), lb.points.at(1));
+    } else {
+      hdg0 = calc_heading_angle(lb.points.at(0), lb.points.at(1));
+    }
+    lb.heading_start = hdg0;
+    int n = lb.points.size() - 1;
+    Eigen::Vector3d x1 = lb.points.at(n);
+    double hdg1;
+    if (pts_out_end.size() > 0) {
+      hdg1 = calc_heading_angle_adv(lb.points.at(n - 1), lb.points.at(n), pts_out_end.front());
+    } else {
+      hdg1 = calc_heading_angle(lb.points.at(n - 1), lb.points.at(n));
+    }
+    // Compute clothoid parameters curv_hor_start, curv_hor_change and dx_end.
+    g1_fit::calc_clothoid(x0.x(), x0.y(), hdg0, x1.x(), x1.y(), hdg1, lb.curv_hor_start,
+                          lb.curv_hor_change, lb.dx_end);
+
     // TODO(tobias): check zero crossing by loop
-    if (lb.points.front().x() <= 0.0 && lb.points.back().x() >= 0.0) {
+    /*if (lb.points.front().x() <= 0.0 && lb.points.back().x() >= 0.0) {
       // Determine start point.
       Eigen::Vector3d x0;
       double hdg0 = 0.0;
@@ -280,7 +418,8 @@ class LaneBoundaryClothoidFit : public LaneBoundarySensor {
           "Lane boundary {} does not have a zero crossing in x-direction. Skipping clothoid "
           "calculation..",
           lb.id);
-    }
+    }*/
+    return true;
   }
 
   void clear_cache() {
