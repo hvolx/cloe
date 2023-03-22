@@ -38,7 +38,7 @@ TEST(clothoid_fit, deserialization) {
 
   fable::assert_validate(c, R"({
       "enable": true,
-      "estimation_distance": 20.0
+      "frustum_culling": false
   })");
 }
 
