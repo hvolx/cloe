@@ -110,6 +110,7 @@ TEST(clothoid_fit, spiral_calc_curv_change) {
 
 TEST(lane_boundary, clothoid_line) {
   const double tol = 1E-6;
+  const double tol_cull = 1.1E-3;  // Interpolation to frustum planes adds up to 1 mm offset.
   auto logger = cloe::logger::get("clothoid");
   cloe::Frustum frustum;
   frustum.fov_h = M_2X_PI;
@@ -130,29 +131,32 @@ TEST(lane_boundary, clothoid_line) {
   EXPECT_NEAR(lb.curv_hor_start, 0.0, tol);
   EXPECT_NEAR(lb.curv_hor_change, 0.0, tol);
   EXPECT_NEAR(lb.dx_end, 30.0, tol);
-  // Polyline in x-direction, culling (x-range).
+  // Polyline in x-direction, culling (x-range). Cull at near-plane.
   frustum_culling = true;
   ASSERT_TRUE(cloe::component::fit_clothoid(logger, frustum_culling, frustum, lb));
-  EXPECT_NEAR(lb.dx_start, 0.0, tol);
-  EXPECT_NEAR(lb.dy_start, 0.0, tol);
+  EXPECT_NEAR(lb.dx_start, 0.0, tol_cull);
+  EXPECT_NEAR(lb.dy_start, 0.0, tol_cull);
   EXPECT_NEAR(lb.heading_start, 0.0, tol);
   EXPECT_NEAR(lb.curv_hor_start, 0.0, tol);
   EXPECT_NEAR(lb.curv_hor_change, 0.0, tol);
-  EXPECT_NEAR(lb.dx_end, 20.0, tol);
+  EXPECT_NEAR(lb.dx_end, 20.0, tol_cull);
   // Polyline in x-direction, culling.
   frustum_culling = true;
   frustum.fov_h = M_PI_2;
-  frustum.fov_v = 1.01 * M_PI_2;
+  // Cull line at vertical planes.
+  frustum.fov_v = M_PI_2;
+  // Make sure no culling occurs at near/far planes.
   frustum.clip_near = -10.0;
   frustum.clip_far = 30.0;
   lb.points =
       get_line_lb_points(Eigen::Vector3d(-5.0, 0.0, -5.0), Eigen::Vector3d(25.0, 0.0, -5.0), 7);
-  EXPECT_NEAR(lb.dx_start, 5.0, tol);
-  EXPECT_NEAR(lb.dy_start, 0.0, tol);
+  ASSERT_TRUE(cloe::component::fit_clothoid(logger, frustum_culling, frustum, lb));
+  EXPECT_NEAR(lb.dx_start, 5.0, tol_cull);
+  EXPECT_NEAR(lb.dy_start, 0.0, tol_cull);
   EXPECT_NEAR(lb.heading_start, 0.0, tol);
   EXPECT_NEAR(lb.curv_hor_start, 0.0, tol);
   EXPECT_NEAR(lb.curv_hor_change, 0.0, tol);
-  EXPECT_NEAR(lb.dx_end, 20.0, tol);
+  EXPECT_NEAR(lb.dx_end, 20.0, tol_cull);
   // Polyline in y-direction, no culling.
   frustum_culling = false;
   lb.points =
@@ -166,15 +170,18 @@ TEST(lane_boundary, clothoid_line) {
   EXPECT_NEAR(lb.dx_end, 30.0, tol);
   // Polyline in y-direction, culling.
   frustum_culling = true;
+  // Cull at horizontal frustum planes.
   frustum.fov_h = M_PI_2;
-  frustum.offset_h = 0.99 * M_PI_4;  // fov = positive quadrant +x/+y or 0..90deg.
+  frustum.offset_h = M_PI_4;  // fov = positive quadrant +x/+y or 0..90deg.
+  lb.points =
+      get_line_lb_points(Eigen::Vector3d(10.0, 0.0, 0.0), Eigen::Vector3d(10.0, 25.0, 0.0), 6);
   ASSERT_TRUE(cloe::component::fit_clothoid(logger, frustum_culling, frustum, lb));
-  EXPECT_NEAR(lb.dx_start, 10.0, tol);
-  EXPECT_NEAR(lb.dy_start, 0.0, tol);
+  EXPECT_NEAR(lb.dx_start, 10.0, tol_cull);
+  EXPECT_NEAR(lb.dy_start, 0.0, tol_cull);
   EXPECT_NEAR(lb.heading_start, M_PI_2, tol);
   EXPECT_NEAR(lb.curv_hor_start, 0.0, tol);
   EXPECT_NEAR(lb.curv_hor_change, 0.0, tol);
-  EXPECT_NEAR(lb.dx_end, 25.0, tol);
+  EXPECT_NEAR(lb.dx_end, 25.0, tol_cull);
   // Polyline in pos. x-, neg. y-direction, no culling.
   frustum_culling = false;
   lb.points =
