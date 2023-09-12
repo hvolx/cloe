@@ -2,6 +2,9 @@ cmake_minimum_required(VERSION 3.15 FATAL_ERROR)
 
 project(cloe_engine LANGUAGES CXX)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_VERBOSE_MAKEFILE ON)
+
 find_package(cloe-runtime REQUIRED)
 find_package(cloe-models REQUIRED)
 find_package(fable REQUIRED)
@@ -10,6 +13,7 @@ find_package(CLI11 REQUIRED)
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 find_package(sol2 REQUIRED)
+find_package(LRDB REQUIRED)
 
 include(TargetLinting)
 include(GNUInstallDirs)
@@ -87,6 +91,12 @@ add_library(cloe::lualib ALIAS cloe-lualib)
 target_compile_definitions(cloe-lualib
   PUBLIC
     SOL_ALL_SAFETIES_ON=1
+    LRDB_USE_BOOST_ASIO=1
+)
+target_compile_options(cloe-lualib
+    PUBLIC
+    -g
+    -O0
 )
 set_target_properties(cloe-lualib PROPERTIES
     CXX_STANDARD 17
@@ -100,6 +110,8 @@ target_include_directories(cloe-lualib
 )
 target_link_libraries(cloe-lualib
   PUBLIC
+    LRDB::LRDB
+    boost::boost
     sol2::sol2
     cloe::stacklib
     cloe::runtime

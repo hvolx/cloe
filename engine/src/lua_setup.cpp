@@ -25,6 +25,8 @@
 
 #include <sol/state_view.hpp>  // for state_view
 
+#include <lrdb/server.hpp>  // lrdb::server
+
 #include <cloe/utility/std_extensions.hpp>  // for split_string
 
 #include "error_handler.hpp"  // for format_cloe_error
@@ -148,8 +150,17 @@ void setup_lua(sol::state_view& lua, Stack& stack) {
   }
 }
 
+lrdb::server& get_debug_server() {
+  const int listen_port = 21110;  //listen tcp port for debugger interface
+  static lrdb::server debug_server(listen_port);
+  return debug_server;
+}
+
 sol::state new_lua(const LuaOptions& opt, Stack& s) {
   sol::state lua;
+
+  // LRDB initialization
+  get_debug_server().reset(lua.lua_state());
 
   // Setup lua path:
   std::vector<std::string> lua_path{};

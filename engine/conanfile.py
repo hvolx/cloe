@@ -55,6 +55,8 @@ class CloeEngine(ConanFile):
         self.requires(f"cloe-models/{self.version}@cloe/develop")
         self.requires("cli11/2.3.2", private=True)
         self.requires("sol2/3.3.0")
+        self.requires("LRDB/latest")
+        #self.requires("lua/[>=5.0.0]")
         if self.options.server:
             self.requires(f"cloe-oak/{self.version}@cloe/develop", private=True)
         self.requires("boost/[>=1.65.1]")
