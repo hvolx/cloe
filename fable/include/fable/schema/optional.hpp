@@ -113,7 +113,7 @@ class Optional : public Base<Optional<T, P>> {
 };
 
 template <typename T, typename P>
-Optional<T, P> make_schema(boost::optional<T>* ptr, const P& prototype, std::string&& desc) {
+Optional<T, P> make_schema_impl(boost::optional<T>* ptr, const P& prototype, std::string&& desc) {
   return Optional<T, P>(ptr, prototype, std::move(desc));
 }
 

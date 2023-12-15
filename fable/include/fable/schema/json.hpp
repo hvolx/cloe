@@ -80,7 +80,7 @@ class FromJson : public Base<FromJson<T>> {
 };
 
 template <typename T>
-inline FromJson<T> make_schema(T* ptr, JsonType t, std::string&& desc) {
+inline FromJson<T> make_schema_impl(T* ptr, JsonType t, std::string&& desc) {
   return FromJson<T>(ptr, t, std::move(desc));
 }
 

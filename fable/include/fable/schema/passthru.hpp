@@ -92,12 +92,12 @@ class Passthru : public Base<Passthru<P>> {
   Type* ptr_{nullptr};
 };
 
-inline Passthru<Ignore> make_schema(Conf* ptr, std::string&& desc) {
+inline Passthru<Ignore> make_schema_impl(Conf* ptr, std::string&& desc) {
   return Passthru<Ignore>(ptr, Ignore(), std::move(desc));
 }
 
 template <typename P>
-Passthru<P> make_schema(Conf* ptr, const P& prototype, std::string&& desc) {
+Passthru<P> make_schema_impl(Conf* ptr, const P& prototype, std::string&& desc) {
   return Passthru<P>(ptr, prototype, std::move(desc));
 }
 

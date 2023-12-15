@@ -47,8 +47,8 @@ namespace schema {
  *   Struct can be instantiated then like so:
  *
  *     return Struct{
- *        {"prop_a", make_schema(...)},
- *        {"prop_b", make_schema(...)},
+ *        {"prop_a", make_schema_impl(...)},
+ *        {"prop_b", make_schema_impl(...)},
  *     };
  */
 template <typename S = Box>
@@ -92,7 +92,7 @@ class Struct : public Base<Struct> {
    *         return Struct{
    *           Base::schema_impl(),
    *           {
-   *             {"member", make_schema(&member, "important addition")},
+   *             {"member", make_schema_impl(&member, "important addition")},
    *           }
    *         };
    *       }
@@ -218,22 +218,22 @@ class Struct : public Base<Struct> {
 };
 
 template <typename T, typename = enable_if_property_list_t<T>>
-inline Struct make_schema(T&& props) {
+inline Struct make_schema_impl(T&& props) {
   return Struct(std::forward<T>(props));
 }
 
 template <typename T, typename = enable_if_property_list_t<T>>
-inline Struct make_schema(std::string&& desc, T&& props) {
+inline Struct make_schema_impl(std::string&& desc, T&& props) {
   return Struct(std::move(desc), std::forward<T>(props));
 }
 
 template <typename T, typename = enable_if_property_list_t<T>>
-inline Struct make_schema(std::string&& desc, const Box& base, T&& props) {
+inline Struct make_schema_impl(std::string&& desc, const Box& base, T&& props) {
   return Struct(std::move(desc), base, std::forward<T>(props));
 }
 
 template <typename T, typename = enable_if_property_list_t<T>>
-inline Struct make_schema(std::string&& desc, const Struct& base, T&& props) {
+inline Struct make_schema_impl(std::string&& desc, const Struct& base, T&& props) {
   return Struct(std::move(desc), base, std::forward<T>(props));
 }
 

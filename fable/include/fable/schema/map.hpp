@@ -189,7 +189,7 @@ class Map : public Base<Map<T, P>> {
 };
 
 template <typename T, typename P>
-Map<T, P> make_schema(std::map<std::string, T>* ptr, const P& prototype, std::string&& desc) {
+Map<T, P> make_schema_impl(std::map<std::string, T>* ptr, const P& prototype, std::string&& desc) {
   return Map<T, P>(ptr, prototype, std::move(desc));
 }
 

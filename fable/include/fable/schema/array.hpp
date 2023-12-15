@@ -174,7 +174,7 @@ class Array : public Base<Array<T, P>> {
 };
 
 template <typename T, typename P>
-Array<T, P> make_schema(std::vector<T>* ptr, const P& prototype, std::string&& desc) {
+Array<T, P> make_schema_impl(std::vector<T>* ptr, const P& prototype, std::string&& desc) {
   return Array<T, P>(ptr, prototype, std::move(desc));
 }
 

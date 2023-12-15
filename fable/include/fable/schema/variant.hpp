@@ -125,13 +125,13 @@ class Variant : public Interface {
   bool unique_match_{false};
 };
 
-inline Variant make_schema(std::initializer_list<Box> vec) { return Variant(vec); }
-inline Variant make_schema(std::string&& desc, std::initializer_list<Box> vec) {
+inline Variant make_schema_impl(std::initializer_list<Box> vec) { return Variant(vec); }
+inline Variant make_schema_impl(std::string&& desc, std::initializer_list<Box> vec) {
   return Variant(std::move(desc), std::vector<Box>(vec));
 }
 
-inline Variant make_schema(std::vector<Box>&& vec) { return Variant(std::move(vec)); }
-inline Variant make_schema(std::string&& desc, std::vector<Box>&& vec) {
+inline Variant make_schema_impl(std::vector<Box>&& vec) { return Variant(std::move(vec)); }
+inline Variant make_schema_impl(std::string&& desc, std::vector<Box>&& vec) {
   return Variant(std::move(desc), std::move(vec));
 }
 
