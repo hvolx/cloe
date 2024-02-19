@@ -57,8 +57,9 @@ namespace details {
  */
 template <typename T>
 struct make_schema_wrapper1 {
-  static auto make_schema(T* ptr, std::string&& desc) {
-    return ::fable::schema::make_schema_impl(ptr, std::move(desc));
+  template<typename S>
+  static auto make_schema(T* ptr, S&& desc) {
+    return ::fable::schema::make_schema_impl(ptr, std::forward<S>(desc));
   }
 };
 
@@ -66,8 +67,9 @@ struct make_schema_wrapper1 {
  */
 template <typename T, typename P>
 struct make_schema_wrapper2 {
-  static auto make_schema(T* ptr, P proto, std::string&& desc) {
-    return ::fable::schema::make_schema_impl(ptr, std::move(proto), std::move(desc));
+  template<typename S>
+  static auto make_schema(T* ptr, P&& proto, S&& desc) {
+    return ::fable::schema::make_schema_impl(ptr, std::forward<P>(proto), std::forward<S>(desc));
   }
 };
 
@@ -80,9 +82,9 @@ struct make_schema_wrapper2 {
  * \param desc Textual description of the datum
  * \return Schema for the datum
  */
-template <typename T>
-auto make_schema(T* ptr, std::string&& desc) {
-  return details::make_schema_wrapper1<T>::make_schema(ptr, std::move(desc));
+template <typename T, typename S>
+auto make_schema(T* ptr, S&& desc) {
+  return details::make_schema_wrapper1<T>::make_schema(ptr, std::forward<S>(desc));
 }
 
 /**
@@ -95,9 +97,9 @@ auto make_schema(T* ptr, std::string&& desc) {
  * \note Those types which have a prototype, namely string & path
  *       do not matter for the compile-time reduction
  */
-template <typename T, typename P>
-auto make_schema(T* ptr, P proto, std::string&& desc) {
-  return details::make_schema_wrapper2<T, P>::make_schema(ptr, std::move(proto), std::move(desc));
+template <typename T, typename S, typename P>
+auto make_schema(T* ptr, P&& proto, S&& desc) {
+  return details::make_schema_wrapper2<T, P>::make_schema(ptr, std::forward<P>(proto), std::forward<S>(desc));
 }
 
 // Pre-Instantiate above templates for relevant datatypes
