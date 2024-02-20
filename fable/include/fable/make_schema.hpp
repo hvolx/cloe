@@ -65,9 +65,9 @@ struct make_schema_wrapper1 {
 
 /**
  */
-template <typename T, typename P>
+template <typename T>
 struct make_schema_wrapper2 {
-  template<typename S>
+  template<typename P, typename S>
   static auto make_schema(T* ptr, P&& proto, S&& desc) {
     return ::fable::schema::make_schema_impl(ptr, std::forward<P>(proto), std::forward<S>(desc));
   }
@@ -99,7 +99,7 @@ auto make_schema(T* ptr, S&& desc) {
  */
 template <typename T, typename S, typename P>
 auto make_schema(T* ptr, P&& proto, S&& desc) {
-  return details::make_schema_wrapper2<T, P>::make_schema(ptr, std::forward<P>(proto), std::forward<S>(desc));
+  return details::make_schema_wrapper2<T>::make_schema(ptr, std::forward<P>(proto), std::forward<S>(desc));
 }
 
 // Pre-Instantiate above templates for relevant datatypes
